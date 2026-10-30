@@ -114,7 +114,7 @@
         <button id="startBtn">Start Session</button>
     </div>
 
-    <script>
+<script>
         document.addEventListener('DOMContentLoaded', () => {
             const ui = document.getElementById('ui');
             const startBtn = document.getElementById('startBtn');
@@ -130,13 +130,26 @@
             let state = false;
             let animationFrameId = null;
             let durationMs = 0;
+            let wakeLock = null;
 
-            startBtn.addEventListener('click', () => {
+            async function requestWakeLock() {
+                if ('wakeLock' in navigator) {
+                    try {
+                        wakeLock = await navigator.wakeLock.request('screen');
+                    } catch (err) {
+                        console.log('Wake Lock denied:', err);
+                    }
+                }
+            }
+
+            startBtn.addEventListener('click', async () => {
                 if (document.documentElement.requestFullscreen) {
                     document.documentElement.requestFullscreen().catch(() => {});
                 } else if (document.documentElement.webkitRequestFullscreen) {
                     document.documentElement.webkitRequestFullscreen();
                 }
+
+                await requestWakeLock();
 
                 durationMs = parseInt(timeSelect.value) * 60 * 1000;
                 ui.style.display = 'none';
@@ -164,9 +177,21 @@
                 }
             });
 
+            document.addEventListener('visibilitychange', async () => {
+                if (isRunning && document.visibilityState === 'visible') {
+                    await requestWakeLock();
+                }
+            });
+
             function stopSession() {
                 isRunning = false;
                 cancelAnimationFrame(animationFrameId);
+                
+                if (wakeLock !== null) {
+                    wakeLock.release().catch(() => {});
+                    wakeLock = null;
+                }
+
                 if (document.exitFullscreen) {
                     document.exitFullscreen().catch(() => {});
                 } else if (document.webkitExitFullscreen) {
@@ -180,8 +205,8 @@
                 const targetHz = parseFloat(freqSelect.value);
                 if (!rampCheck.checked) return targetHz;
 
-                const baselineHz = 15.0; // Waking state
-                const rampTime = durationMs * 0.15; // 15% of session for transitions
+                const baselineHz = 15.0; 
+                const rampTime = durationMs * 0.15; 
 
                 if (elapsed < rampTime) {
                     const progress = elapsed / rampTime;
